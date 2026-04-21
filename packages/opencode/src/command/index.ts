@@ -10,6 +10,14 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_AUTOCREW_START from "./template/autocrew.txt"
+import PROMPT_AUTOCREW_PAUSE from "./template/pause-autocrew.txt"
+import PROMPT_AUTOCREW_RESUME from "./template/resume-autocrew.txt"
+import PROMPT_AUTOCREW_STOP from "./template/stop-autocrew.txt"
+import PROMPT_AUTOCREW_STATUS from "./template/status-autocrew.txt"
+import PROMPT_AUTOCREW_APPLY from "./template/apply-autocrew.txt"
+import PROMPT_AUTOCREW_KILL_SESSION from "./template/kill-session.txt"
+import PROMPT_AUTOCREW_CANCEL_TASK from "./template/cancel-task.txt"
 
 type State = {
   commands: Record<string, Info>
@@ -99,6 +107,86 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+
+      // AutoCrew slash commands. /autocrew spawns the orchestrator as a subtask;
+      // pause/resume/stop/status/apply/kill-session/cancel-task run in the current
+      // session and operate on the most recent run's state directory.
+      commands["autocrew"] = {
+        name: "autocrew",
+        description: "start an AutoCrew run from design docs + goal",
+        source: "command",
+        agent: "autocrew",
+        get template() {
+          return PROMPT_AUTOCREW_START
+        },
+        subtask: true,
+        hints: hints(PROMPT_AUTOCREW_START),
+      }
+      commands["pause-autocrew"] = {
+        name: "pause-autocrew",
+        description: "pause the active AutoCrew run",
+        source: "command",
+        get template() {
+          return PROMPT_AUTOCREW_PAUSE
+        },
+        hints: hints(PROMPT_AUTOCREW_PAUSE),
+      }
+      commands["resume-autocrew"] = {
+        name: "resume-autocrew",
+        description: "resume the most recent paused AutoCrew run (optional run id $1)",
+        source: "command",
+        agent: "autocrew",
+        get template() {
+          return PROMPT_AUTOCREW_RESUME
+        },
+        subtask: true,
+        hints: hints(PROMPT_AUTOCREW_RESUME),
+      }
+      commands["stop-autocrew"] = {
+        name: "stop-autocrew",
+        description: "halt the current AutoCrew run and clean up worktrees",
+        source: "command",
+        get template() {
+          return PROMPT_AUTOCREW_STOP
+        },
+        hints: hints(PROMPT_AUTOCREW_STOP),
+      }
+      commands["status"] = {
+        name: "status",
+        description: "show AutoCrew run progress (optional run id $1)",
+        source: "command",
+        get template() {
+          return PROMPT_AUTOCREW_STATUS
+        },
+        hints: hints(PROMPT_AUTOCREW_STATUS),
+      }
+      commands["apply"] = {
+        name: "apply",
+        description: "merge the AutoCrew run's winning candidates into the primary workspace",
+        source: "command",
+        get template() {
+          return PROMPT_AUTOCREW_APPLY
+        },
+        hints: hints(PROMPT_AUTOCREW_APPLY),
+      }
+      commands["kill-session"] = {
+        name: "kill-session",
+        description: "terminate a specific child session ($1 = session id)",
+        source: "command",
+        get template() {
+          return PROMPT_AUTOCREW_KILL_SESSION
+        },
+        hints: hints(PROMPT_AUTOCREW_KILL_SESSION),
+      }
+      commands["cancel-task"] = {
+        name: "cancel-task",
+        description: "mark a specific AutoCrew task as user-cancelled ($1 = task id)",
+        source: "command",
+        get template() {
+          return PROMPT_AUTOCREW_CANCEL_TASK
+        },
+        hints: hints(PROMPT_AUTOCREW_CANCEL_TASK),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

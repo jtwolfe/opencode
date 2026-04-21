@@ -1,0 +1,11 @@
+Cancel a specific AutoCrew task.
+
+Task id: $1 (required)
+
+1. Find the task in the current run's `state.json`.
+2. Update its state to `user-cancelled`.
+3. Cancel any associated live worker sessions.
+4. Append a ledger event recording the cancellation.
+5. The orchestrator will skip this task on its next dispatch round and treat it as a known limitation in any meta-evaluation.
+
+This does not undo any work the task already produced. To roll back partial work, use `/stop-autocrew` instead and inspect the worktrees manually.

@@ -1,0 +1,10 @@
+Resume the most recent paused AutoCrew run.
+
+1. Find the most recent run state directory under `.opencode/autocrew-state/`. (If `$1` is provided, use that run id directly.)
+2. Read `state.json` and `plan.json`. Verify `phase` is `paused` (or `executing` if last run was interrupted before pause).
+3. Reload the plan into your context. The plan is authoritative — do not re-plan unless tasks have changed.
+4. Reconcile against live child sessions: any task in `running` state without a live child should be reset to `pending` (it will be redispatched).
+5. Update `phase` back to `executing`, write the state atomically.
+6. Resume dispatching from the next pending rank.
+
+If no paused run is found, report that to the user.

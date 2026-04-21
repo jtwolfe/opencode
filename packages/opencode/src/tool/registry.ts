@@ -12,6 +12,9 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { IngestDesignDocsTool } from "./ingest-design-docs"
+import { SmartTaskTool } from "./smart-task"
+import { Worktree } from "../worktree"
 import * as Tool from "./tool"
 import { Config } from "../config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -87,6 +90,7 @@ export const layer: Layer.Layer<
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
+  | Worktree.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,6 +117,8 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const ingestdocstool = yield* IngestDesignDocsTool
+    const smarttasktool = yield* SmartTaskTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -194,6 +200,8 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          ingestDesignDocs: Tool.init(ingestdocstool),
+          smartTask: Tool.init(smarttasktool),
         })
 
         return {
@@ -214,6 +222,8 @@ export const layer: Layer.Layer<
             tool.code,
             tool.skill,
             tool.patch,
+            tool.ingestDesignDocs,
+            tool.smartTask,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
           ],
@@ -335,5 +345,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(Worktree.defaultLayer),
   ),
 )

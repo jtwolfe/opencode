@@ -1,0 +1,7 @@
+Pause the current AutoCrew run.
+
+Find the most recent run state directory under `.opencode/autocrew-state/`. Read its `state.json`. Update `phase` to `"paused"` and `updated_at` to the current ISO timestamp. Write it back atomically.
+
+Do not dispatch any new tasks. Acknowledge the pause to the user with the run id and the number of tasks completed/in-flight/in-review at pause time.
+
+The run can be resumed later with `/resume-autocrew`.

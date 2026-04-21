@@ -1,0 +1,10 @@
+Apply the AutoCrew run's final changeset.
+
+1. Find the most recent run state directory under `.opencode/autocrew-state/`.
+2. Verify `phase` is `completed` (or `integrating`). If not, refuse with a clear message.
+3. For each completed task with a winning worktree branch, merge that branch into the orchestrator's primary worktree using `git merge --no-ff opencode/<branch>`.
+4. After all merges succeed, dispose and remove all candidate worktrees.
+5. Update `state.json` `phase` to `completed`.
+6. Surface a final diff summary to the user (files modified, tests passing).
+
+If any merge conflict arises, halt the apply, leave the conflict for the user, and report which branch and which files conflicted.

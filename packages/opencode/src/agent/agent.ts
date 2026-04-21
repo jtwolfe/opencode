@@ -13,6 +13,10 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_AUTOCREW from "./prompt/autocrew.txt"
+import PROMPT_AUTOCREW_PLANNER from "./prompt/planner.txt"
+import PROMPT_AUTOCREW_CODER from "./prompt/coder.txt"
+import PROMPT_AUTOCREW_REVIEWER from "./prompt/reviewer.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -230,6 +234,101 @@ export const layer = Layer.effect(
               user,
             ),
             prompt: PROMPT_SUMMARY,
+          },
+          autocrew: {
+            name: "autocrew",
+            description:
+              "AutoCrew Orchestrator. Heavy-model primary agent that ingests design docs and a goal, produces a task DAG, dispatches workers via smart-task, arbitrates candidates, and renders continue/backlog/halt verdicts. Never writes code. See autocrew-design-docs/08 §3 for the full prompt.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                read: "allow",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                bash: "allow",
+                "smart-task": "allow",
+                "ingest-design-docs": "allow",
+                task: "allow",
+                webfetch: "allow",
+                websearch: "allow",
+                // Orchestrator should not write code itself; the prompt enforces this,
+                // but we also deny edit/write at the permission layer as a structural guard.
+                edit: "deny",
+                write: "deny",
+                patch: "deny",
+                multiedit: "deny",
+              }),
+              user,
+            ),
+            prompt: PROMPT_AUTOCREW,
+            mode: "primary",
+            native: true,
+          },
+          planner: {
+            name: "planner",
+            description:
+              "AutoCrew Planner role. Decomposes design docs + a goal into a DAG of independently verifiable tasks, or revises a failing task on orchestrator escalation. Produces JSON; never writes code. See autocrew-design-docs/04 §3.1.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                read: "allow",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                task: "allow",
+                "smart-task": "allow",
+                "ingest-design-docs": "allow",
+                webfetch: "allow",
+                websearch: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_AUTOCREW_PLANNER,
+            mode: "subagent",
+            native: true,
+          },
+          coder: {
+            name: "coder",
+            description:
+              "AutoCrew Coder role. Pure execution: implements a single task in its assigned worktree. Never asks questions or explains. See autocrew-design-docs/04 §3.2.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "deny",
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            prompt: PROMPT_AUTOCREW_CODER,
+            mode: "subagent",
+            native: true,
+          },
+          reviewer: {
+            name: "reviewer",
+            description:
+              "AutoCrew Reviewer role. Scores a candidate worktree against acceptance criteria. Outputs JSON with score/issues/approved. Never writes code. See autocrew-design-docs/04 §3.3.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                read: "allow",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                bash: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_AUTOCREW_REVIEWER,
+            mode: "subagent",
+            native: true,
           },
         }
 

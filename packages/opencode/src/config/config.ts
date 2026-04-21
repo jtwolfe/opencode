@@ -234,6 +234,85 @@ const InfoSchema = Schema.Struct({
       }),
     }),
   ),
+  autocrew: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable AutoCrew multi-agent orchestration mode. Default: false.",
+      }),
+      max_parallel_workers: Schema.optional(PositiveInt).annotate({
+        description: "Global limit on simultaneous child sessions (1-12). Default: 6.",
+      }),
+      roles: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description: "List of role names that AutoCrew may use. v0 minimum: [planner, coder, reviewer].",
+      }),
+      selection_strategy: Schema.optional(
+        Schema.Literals(["best-candidate", "majority", "all-agree", "orchestrator-vote"]),
+      ).annotate({
+        description:
+          "Strategy for resolving parallel candidate outputs. v0 only supports 'best-candidate'. Default: best-candidate.",
+      }),
+      plan_iteration_rounds: Schema.optional(NonNegativeInt).annotate({
+        description: "Number of times the Planner may self-critique before execution. Default: 2.",
+      }),
+      require_initial_plan_approval: Schema.optional(Schema.Boolean).annotate({
+        description: "Show the plan to the user for approval before dispatching workers. Default: true.",
+      }),
+      full_auto: Schema.optional(Schema.Boolean).annotate({
+        description: "Skip all human gates after initial kickoff. Default: false.",
+      }),
+      timeout_per_task_minutes: Schema.optional(PositiveInt).annotate({
+        description: "Maximum runtime per micro-task before cancellation. Default: 20.",
+      }),
+      default_worker_model: Schema.optional(Schema.String).annotate({
+        description: "Fallback model for any role without an explicit model. Default: 'zen/big-pickle' (free).",
+      }),
+      failure_policy: Schema.optional(
+        Schema.Struct({
+          max_retries_per_task: Schema.optional(NonNegativeInt).annotate({
+            description: "Bounded same-task retries before escalating to Planner. Default: 3.",
+          }),
+          max_replans_per_task: Schema.optional(NonNegativeInt).annotate({
+            description: "How many times the Planner may re-plan a failing task. Default: 2.",
+          }),
+          review_state_on_exhaustion: Schema.optional(Schema.Boolean).annotate({
+            description: "Park exhausted tasks in review state rather than failing the run. Default: true.",
+          }),
+          orchestrator_meta_eval_after_review: Schema.optional(Schema.Boolean).annotate({
+            description: "Orchestrator renders continue/backlog/halt verdict when tasks enter review. Default: true.",
+          }),
+        }),
+      ),
+      worktree: Schema.optional(
+        Schema.Struct({
+          enabled: Schema.optional(Schema.Boolean).annotate({
+            description: "Use @opencode/Worktree to isolate parallel candidate sessions. Default: true.",
+          }),
+          cleanup_losing_candidates: Schema.optional(Schema.Boolean).annotate({
+            description: "Automatically Worktree.remove candidates not selected. Default: true.",
+          }),
+          keep_on_failure: Schema.optional(Schema.Boolean).annotate({
+            description: "Preserve worktree(s) when a task enters review state for inspection. Default: true.",
+          }),
+        }),
+      ),
+      budget: Schema.optional(
+        Schema.Struct({
+          total_runtime_hours: Schema.optional(Schema.Number).annotate({
+            description: "Hard stop for an AutoCrew run. Default: 4.",
+          }),
+          max_task_depth: Schema.optional(PositiveInt).annotate({
+            description: "Prevents infinite recursion in planning (re-plans count against depth). Default: 5.",
+          }),
+          max_rounds_per_run: Schema.optional(PositiveInt).annotate({
+            description:
+              "Hard cap on orchestrator LLM rounds per run. Prevents dispatch-check-dispatch runaway. Default: 40.",
+          }),
+        }),
+      ),
+    }),
+  ).annotate({
+    description: "AutoCrew multi-agent orchestration configuration. See autocrew-design-docs/ for design.",
+  }),
 })
 
 // Schema.Struct produces readonly types by default, but the service code

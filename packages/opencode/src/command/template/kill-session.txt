@@ -1,0 +1,9 @@
+Kill a specific child session.
+
+Session id: $1 (required)
+
+1. Verify the session exists and is a child of the current orchestrator session.
+2. Cancel any in-flight tool calls in that session.
+3. Call `Session.remove` on the session.
+4. If the session was running an AutoCrew task, mark its task as `failed-retry` in `state.json` so the orchestrator can decide whether to retry, replan, or move to review.
+5. Append a ledger event recording the kill action.
