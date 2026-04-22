@@ -251,9 +251,12 @@ export const layer = Layer.effect(
                 bash: "allow",
                 "smart-task": "allow",
                 "ingest-design-docs": "allow",
-                task: "allow",
                 webfetch: "allow",
                 websearch: "allow",
+                // The orchestrator dispatches workers through smart-task ONLY.
+                // The generic `task` tool is denied so the LLM cannot bypass
+                // worktree isolation by spawning subagents via `task` directly.
+                task: "deny",
                 // Orchestrator should not write code itself; the prompt enforces this,
                 // but we also deny edit/write at the permission layer as a structural guard.
                 edit: "deny",

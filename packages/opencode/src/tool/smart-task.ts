@@ -3,12 +3,15 @@ import { Effect } from "effect"
 import * as Tool from "./tool"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
-import { MessageID } from "../session/schema"
+import { MessageID, SessionID } from "../session/schema"
 import { Agent } from "../agent/agent"
 import { Config } from "../config"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { InstanceState } from "@/effect"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Worktree } from "../worktree"
 import { SmartTaskInput, type TaskSpec } from "../autocrew/types"
 import { Dag } from "../autocrew/dag"
@@ -16,7 +19,10 @@ import * as WorktreeLifecycle from "../autocrew/worktree-lifecycle"
 import { Selection, type Candidate } from "../autocrew/selection"
 import { Ledger } from "../autocrew/ledger"
 import { Failure } from "../autocrew/failure"
+import { Log } from "../util"
 import type { TaskPromptOps } from "./task"
+
+const log = Log.create({ service: "smart-task" })
 
 const id = "smart-task"
 
@@ -178,6 +184,40 @@ export const SmartTaskTool = Tool.define(
         return yield* Effect.fail(new Error("SmartTaskTool requires promptOps in ctx.extra"))
       }
 
+      // Trace-log: what Instance context does smart-task see at entry?
+      // This pinpoints the WorktreeNotGitError failure mode — if ctx.project.vcs
+      // is not "git" here, the orchestrator was spawned in a non-git instance
+      // and we need to re-anchor via the orchestrator session's recorded directory.
+      type EntryCtx = { directory: string; worktree: string; project: { id: string; vcs?: "git" } }
+      const entryCtxFallback: EntryCtx = {
+        directory: "<no-ctx>",
+        worktree: "<no-ctx>",
+        project: { id: "<no-ctx>" },
+      }
+      const entryCtx: EntryCtx = yield* InstanceState.context.pipe(
+        Effect.map((c) => ({
+          directory: c.directory,
+          worktree: c.worktree,
+          project: { id: c.project.id, vcs: c.project.vcs },
+        })),
+        Effect.catchCause(() => Effect.succeed(entryCtxFallback)),
+      )
+      const orchSession = yield* sessions
+        .get(ctx.sessionID as SessionID)
+        .pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      log.info("smart-task entry", {
+        planId: params.plan_id,
+        taskCount: tasks.length,
+        orchestratorSessionId: ctx.sessionID,
+        entryInstanceDirectory: entryCtx.directory,
+        entryInstanceWorktree: entryCtx.worktree,
+        entryProjectId: entryCtx.project?.id,
+        entryProjectVcs: entryCtx.project?.vcs,
+        sessionRecordedDirectory: orchSession?.directory,
+        cwd: process.cwd(),
+        pathSnippet: (process.env.PATH ?? "").slice(0, 300),
+      })
+
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") {
         return yield* Effect.fail(new Error("smart-task must be called from an assistant message context"))
@@ -258,7 +298,76 @@ export const SmartTaskTool = Tool.define(
 
         let worktreeInfo: Worktree.Info | undefined
         if (input.wantWorktree && input.worktreeName) {
-          worktreeInfo = yield* worktreeSvc.create({ name: input.worktreeName })
+          // Re-anchor the Instance context to the orchestrator session's recorded
+          // directory before calling Worktree.create. The orchestrator session may
+          // have been spawned via handleSubtask and inherit an InstanceRef pointing
+          // at an unrelated project (e.g., opencode repo root), which causes
+          // WorktreeNotGitError when project.vcs !== "git".
+          //
+          // The session row in the DB records the correct directory (set at
+          // Session.create time from InstanceState.directory). Using that as the
+          // anchor ensures Worktree.create sees the correct git project regardless
+          // of what the calling fiber's InstanceRef happens to be.
+          const anchorDirectory = orchSession?.directory ?? (entryCtx.directory !== "<no-ctx>" ? entryCtx.directory : undefined)
+          if (!anchorDirectory) {
+            return yield* Effect.fail(
+              new Error("smart-task could not determine session directory for worktree creation"),
+            )
+          }
+
+          const createInAnchor = Effect.promise<Worktree.Info | undefined>(async () => {
+            try {
+              return await Instance.provide({
+                directory: anchorDirectory,
+                init: () => BootstrapRuntime.runPromise(InstanceBootstrap),
+                fn: async () => {
+                  const ctxInside = Instance.current
+                  log.info("worktree.create anchor context", {
+                    anchorDirectory,
+                    innerInstanceDirectory: ctxInside.directory,
+                    innerInstanceWorktree: ctxInside.worktree,
+                    innerProjectId: ctxInside.project.id,
+                    innerProjectVcs: ctxInside.project.vcs,
+                    worktreeName: input.worktreeName,
+                  })
+                  const bound = worktreeSvc.create({ name: input.worktreeName! }).pipe(
+                    Effect.provideService(InstanceRef, ctxInside),
+                    Effect.provideService(WorkspaceRef, WorkspaceContext.workspaceID),
+                  )
+                  return await Effect.runPromise(bound)
+                },
+              })
+            } catch (err) {
+              log.error("worktree.create failed inside anchor", {
+                anchorDirectory,
+                worktreeName: input.worktreeName,
+                error: err instanceof Error ? err.message : String(err),
+                stack: err instanceof Error ? err.stack?.slice(0, 1500) : undefined,
+              })
+              return undefined
+            }
+          })
+
+          const created = yield* createInAnchor
+          if (!created) {
+            yield* Ledger.appendEvent(params.plan_id, {
+              type: "task-failed",
+              task_id: input.worktreeName,
+              reason: `Worktree.create failed for ${input.worktreeName}`,
+              next_action: "retry",
+            }).pipe(Effect.catch(() => Effect.void))
+            return yield* Effect.fail(
+              new Error(
+                `smart-task: Worktree.create failed for ${input.worktreeName}. See opencode log 'smart-task' for details.`,
+              ),
+            )
+          }
+          worktreeInfo = created
+          log.info("worktree.create success", {
+            name: created.name,
+            branch: created.branch,
+            directory: created.directory,
+          })
         }
 
         function cancel() {
@@ -281,13 +390,25 @@ export const SmartTaskTool = Tool.define(
           }
 
           if (worktreeInfo) {
+            // Bridge Effect → Promise → Effect so the worker's tool calls see
+            // the worktree's instance context. Two things must happen inside fn:
+            //  1. Instance.provide sets ALS (Instance.directory getter reads from here).
+            //  2. We must ALSO provide InstanceRef/WorkspaceRef on the Effect we run,
+            //     because opencode's Effect code reads instance context via
+            //     `InstanceState.context` which looks up the `InstanceRef` service
+            //     on the Effect context (NOT ALS). Mirror `attach()` in
+            //     `src/effect/run-service.ts` and the test fixture's provideInstance.
             let captured: MessageV2.WithParts | undefined
             yield* Effect.promise(() =>
               Instance.provide({
                 directory: worktreeInfo!.directory,
                 init: () => BootstrapRuntime.runPromise(InstanceBootstrap),
                 fn: async () => {
-                  captured = await Effect.runPromise(ops.prompt(promptInput))
+                  const bound = ops.prompt(promptInput).pipe(
+                    Effect.provideService(InstanceRef, Instance.current),
+                    Effect.provideService(WorkspaceRef, WorkspaceContext.workspaceID),
+                  )
+                  captured = await Effect.runPromise(bound)
                 },
               }),
             )

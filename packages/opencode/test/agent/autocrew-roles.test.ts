@@ -99,17 +99,32 @@ test("autocrew orchestrator is a primary agent with smart-task allowed and edit/
       expect(orch).toBeDefined()
       expect(orch?.mode).toBe("primary")
       expect(orch?.native).toBe(true)
-      // Prompt content checks — verifies Doc 08 §3 was installed verbatim.
+      // Prompt content checks — verifies the tool-call-oriented prompt is installed.
       expect(orch?.prompt).toBeDefined()
       expect(orch!.prompt!).toContain("AutoCrew Orchestrator")
       expect(orch!.prompt!).toContain("you do not write or edit code")
-      expect(orch!.prompt!).toContain("continue, backlog, or halt")
-      // Permissions: orchestrator can dispatch but cannot edit code.
+      // Meta-evaluation trio must be present (in any listing form).
+      expect(orch!.prompt!).toMatch(/continue.*backlog.*halt/)
+      // Tool-call framing: the prompt must direct the model to call real tools.
+      expect(orch!.prompt!).toContain("`smart-task`")
+      expect(orch!.prompt!).toContain("`ingest-design-docs`")
+      // Harness-XML framing must NOT be the output format. If this regresses,
+      // the orchestrator will stop mid-run emitting fake "<decision>" tags
+      // and the user will have to type "continue" to resume (Apr 21 postmortem).
+      // The prompt may mention <decision> to prohibit it, but must not instruct
+      // the model to emit it as the output structure.
+      expect(orch!.prompt!).not.toContain("The harness parses this structure")
+      expect(orch!.prompt!).not.toContain("Structure every response as:")
+      expect(orch!.prompt!).not.toMatch(/^<decision>/m)
+      expect(orch!.prompt!).not.toContain("<decision>\nOne of:")
+      // Permissions: orchestrator can dispatch via smart-task but cannot
+      // edit code and cannot bypass worktree isolation via the `task` tool.
       expect(evalPerm(orch, "smart-task")).toBe("allow")
       expect(evalPerm(orch, "ingest-design-docs")).toBe("allow")
       expect(evalPerm(orch, "read")).toBe("allow")
       expect(evalPerm(orch, "edit")).toBe("deny")
       expect(evalPerm(orch, "write")).toBe("deny")
+      expect(evalPerm(orch, "task")).toBe("deny")
     },
   })
 })
