@@ -15,63 +15,41 @@ const it = testEffect(
   Layer.mergeAll(Command.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer),
 )
 
-describe("AutoCrew slash commands", () => {
-  it.live("registers all 8 autocrew commands", () =>
+describe("AutoCrew slash commands (v0.1)", () => {
+  it.live("registers only the slash-commands that still need LLM reasoning", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const svc = yield* Command.Service
         const list = yield* svc.list()
         const names = list.map((c) => c.name)
-        for (const expected of [
-          "autocrew",
-          "pause-autocrew",
-          "resume-autocrew",
-          "stop-autocrew",
-          "status",
-          "apply",
-          "kill-session",
-          "cancel-task",
-        ]) {
-          expect(names).toContain(expected)
-        }
+        // Retained as slash-commands:
+        // - /apply: merge logic benefits from LLM conflict reasoning.
+        // - /kill-session and /cancel-task: need specific ids; ctrl+p pickers deferred to v1.
+        expect(names).toContain("apply")
+        expect(names).toContain("kill-session")
+        expect(names).toContain("cancel-task")
+        // Removed in v0.1:
+        // - /autocrew: autocrew is a primary agent mode, not a slash-command.
+        expect(names).not.toContain("autocrew")
+        // - pause/resume/stop/status: migrated to ctrl+p actions (see
+        //   cli/cmd/tui/routes/session/command-autocrew.ts) for direct-fs
+        //   execution without burning LLM tokens.
+        expect(names).not.toContain("pause-autocrew")
+        expect(names).not.toContain("resume-autocrew")
+        expect(names).not.toContain("stop-autocrew")
+        expect(names).not.toContain("status")
       }),
     ),
   )
 
-  it.live("/autocrew is a subtask command targeting the autocrew agent", () =>
+  it.live("/apply has the merge template", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const svc = yield* Command.Service
-        const cmd = yield* svc.get("autocrew")
+        const cmd = yield* svc.get("apply")
         expect(cmd).toBeDefined()
-        expect(cmd?.subtask).toBe(true)
-        expect(cmd?.agent).toBe("autocrew")
         const tpl = yield* Effect.promise(() => Promise.resolve(cmd!.template))
-        expect(tpl).toContain("AutoCrew")
-        expect(tpl).toContain("ingest-design-docs")
-      }),
-    ),
-  )
-
-  it.live("/resume-autocrew is a subtask command targeting the autocrew agent", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const svc = yield* Command.Service
-        const cmd = yield* svc.get("resume-autocrew")
-        expect(cmd).toBeDefined()
-        expect(cmd?.subtask).toBe(true)
-        expect(cmd?.agent).toBe("autocrew")
-      }),
-    ),
-  )
-
-  it.live("/status is not a subtask (read-only, runs in current session)", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const svc = yield* Command.Service
-        const cmd = yield* svc.get("status")
-        expect(cmd).toBeDefined()
-        expect(cmd?.subtask).toBeFalsy()
+        expect(tpl).toMatch(/merge|apply/i)
       }),
     ),
   )

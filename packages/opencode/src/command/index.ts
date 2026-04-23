@@ -10,11 +10,6 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
-import PROMPT_AUTOCREW_START from "./template/autocrew.txt"
-import PROMPT_AUTOCREW_PAUSE from "./template/pause-autocrew.txt"
-import PROMPT_AUTOCREW_RESUME from "./template/resume-autocrew.txt"
-import PROMPT_AUTOCREW_STOP from "./template/stop-autocrew.txt"
-import PROMPT_AUTOCREW_STATUS from "./template/status-autocrew.txt"
 import PROMPT_AUTOCREW_APPLY from "./template/apply-autocrew.txt"
 import PROMPT_AUTOCREW_KILL_SESSION from "./template/kill-session.txt"
 import PROMPT_AUTOCREW_CANCEL_TASK from "./template/cancel-task.txt"
@@ -109,58 +104,15 @@ export const layer = Layer.effect(
         hints: hints(PROMPT_REVIEW),
       }
 
-      // AutoCrew slash commands. /autocrew spawns the orchestrator as a subtask;
-      // pause/resume/stop/status/apply/kill-session/cancel-task run in the current
-      // session and operate on the most recent run's state directory.
-      commands["autocrew"] = {
-        name: "autocrew",
-        description: "start an AutoCrew run from design docs + goal",
-        source: "command",
-        agent: "autocrew",
-        get template() {
-          return PROMPT_AUTOCREW_START
-        },
-        subtask: true,
-        hints: hints(PROMPT_AUTOCREW_START),
-      }
-      commands["pause-autocrew"] = {
-        name: "pause-autocrew",
-        description: "pause the active AutoCrew run",
-        source: "command",
-        get template() {
-          return PROMPT_AUTOCREW_PAUSE
-        },
-        hints: hints(PROMPT_AUTOCREW_PAUSE),
-      }
-      commands["resume-autocrew"] = {
-        name: "resume-autocrew",
-        description: "resume the most recent paused AutoCrew run (optional run id $1)",
-        source: "command",
-        agent: "autocrew",
-        get template() {
-          return PROMPT_AUTOCREW_RESUME
-        },
-        subtask: true,
-        hints: hints(PROMPT_AUTOCREW_RESUME),
-      }
-      commands["stop-autocrew"] = {
-        name: "stop-autocrew",
-        description: "halt the current AutoCrew run and clean up worktrees",
-        source: "command",
-        get template() {
-          return PROMPT_AUTOCREW_STOP
-        },
-        hints: hints(PROMPT_AUTOCREW_STOP),
-      }
-      commands["status"] = {
-        name: "status",
-        description: "show AutoCrew run progress (optional run id $1)",
-        source: "command",
-        get template() {
-          return PROMPT_AUTOCREW_STATUS
-        },
-        hints: hints(PROMPT_AUTOCREW_STATUS),
-      }
+      // AutoCrew slash commands. AutoCrew itself is a primary agent mode —
+      // users switch into it via opencode's agent selector and state their goal;
+      // there is no `/autocrew` command. Operational commands (pause/resume/
+      // stop/status) are now ctrl+p actions (see cli/cmd/tui/routes/session/
+      // command-autocrew.ts) — they don't burn LLM tokens.
+      //
+      // What remains as slash-commands: /apply (needs LLM reasoning about
+      // merges), /kill-session, /cancel-task (both need specific ids and are
+      // low-frequency; ctrl+p pickers are deferred to v1).
       commands["apply"] = {
         name: "apply",
         description: "merge the AutoCrew run's winning candidates into the primary workspace",

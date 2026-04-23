@@ -16,6 +16,7 @@ import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
+import * as AutocrewCmd from "./command-autocrew"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { SplitBorder } from "@tui/component/border"
@@ -992,6 +993,136 @@ export function Session() {
         moveChild(-1)
         dialog.clear()
       }),
+    },
+    // AutoCrew operational actions — direct filesystem handlers, no LLM.
+    // These replace the prompt-emitting /pause-autocrew, /resume-autocrew,
+    // /stop-autocrew, /status slash commands for operators who just want
+    // to act on the current run's state.
+    {
+      title: "AutoCrew: show run status",
+      value: "autocrew.status",
+      category: "AutoCrew",
+      onSelect: async (dialog) => {
+        const latest = await AutocrewCmd.findLatestRun(project.instance.directory())
+        if (!latest) {
+          toast.show({ message: "No AutoCrew runs found in this project", variant: "info" })
+          dialog.clear()
+          return
+        }
+        const state = await AutocrewCmd.readState(latest.stateDir)
+        if (!state) {
+          toast.show({ message: `Run ${latest.runId}: state.json missing or unreadable`, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        const recent = await AutocrewCmd.readLedgerTail(latest.stateDir, 5)
+        toast.show({
+          message: AutocrewCmd.formatStatusSummary(latest.runId, state, recent),
+          variant: "info",
+          duration: 10000,
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "AutoCrew: pause current run",
+      value: "autocrew.pause",
+      category: "AutoCrew",
+      onSelect: async (dialog) => {
+        const latest = await AutocrewCmd.findLatestRun(project.instance.directory())
+        if (!latest) {
+          toast.show({ message: "No AutoCrew runs found in this project", variant: "info" })
+          dialog.clear()
+          return
+        }
+        const state = await AutocrewCmd.readState(latest.stateDir)
+        if (!state) {
+          toast.show({ message: `Run ${latest.runId}: state.json missing`, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        state.phase = "paused"
+        state.updated_at = new Date().toISOString()
+        await AutocrewCmd.writeStateAtomic(latest.stateDir, state)
+        await AutocrewCmd.appendLedgerEvent(latest.stateDir, {
+          type: "phase-change",
+          from: "executing",
+          to: "paused",
+        })
+        toast.show({ message: `Paused ${latest.runId}`, variant: "success" })
+        dialog.clear()
+      },
+    },
+    {
+      title: "AutoCrew: resume latest paused run",
+      value: "autocrew.resume",
+      category: "AutoCrew",
+      onSelect: async (dialog) => {
+        const latest = await AutocrewCmd.findLatestRun(project.instance.directory())
+        if (!latest) {
+          toast.show({ message: "No AutoCrew runs found in this project", variant: "info" })
+          dialog.clear()
+          return
+        }
+        const state = await AutocrewCmd.readState(latest.stateDir)
+        if (!state) {
+          toast.show({ message: `Run ${latest.runId}: state.json missing`, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        state.phase = "executing"
+        state.updated_at = new Date().toISOString()
+        await AutocrewCmd.writeStateAtomic(latest.stateDir, state)
+        await AutocrewCmd.appendLedgerEvent(latest.stateDir, {
+          type: "phase-change",
+          from: "paused",
+          to: "executing",
+        })
+        toast.show({
+          message: `Resumed ${latest.runId}. Switch to the autocrew agent and type "continue" to redispatch.`,
+          variant: "success",
+          duration: 8000,
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "AutoCrew: halt current run",
+      value: "autocrew.stop",
+      category: "AutoCrew",
+      onSelect: async (dialog) => {
+        const latest = await AutocrewCmd.findLatestRun(project.instance.directory())
+        if (!latest) {
+          toast.show({ message: "No AutoCrew runs found in this project", variant: "info" })
+          dialog.clear()
+          return
+        }
+        const state = await AutocrewCmd.readState(latest.stateDir)
+        if (!state) {
+          toast.show({ message: `Run ${latest.runId}: state.json missing`, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        const liveWorktrees = state.worktrees.filter((w) => w.live).length
+        state.phase = "halted"
+        state.updated_at = new Date().toISOString()
+        await AutocrewCmd.writeStateAtomic(latest.stateDir, state)
+        await AutocrewCmd.appendLedgerEvent(latest.stateDir, {
+          type: "meta-eval",
+          verdict: "halt",
+          evidence: "user halted run via ctrl+p",
+        })
+        const note =
+          liveWorktrees > 0
+            ? ` ${liveWorktrees} worktree(s) preserved at ~/.local/share/opencode/worktree/ for inspection — clean up manually if unneeded.`
+            : ""
+        toast.show({
+          message: `Halted ${latest.runId}.${note}`,
+          variant: "warning",
+          duration: 10000,
+        })
+        dialog.clear()
+      },
     },
   ])
 

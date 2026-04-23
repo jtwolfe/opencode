@@ -503,19 +503,41 @@ export const layer = Layer.effect(
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
+      const required = [
+        "node_modules",
+        "package.json",
+        "package-lock.json",
+        "bun.lock",
+        ".gitignore",
+        ".opencode/worktree",
+      ]
       if (!hasIgnore) {
         yield* fs
-          .writeFileString(
-            gitignore,
-            ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
-          )
+          .writeFileString(gitignore, required.join("\n"))
           .pipe(
             Effect.catchIf(
               (e) => e.reason._tag === "PermissionDenied",
               () => Effect.void,
             ),
           )
+        return
       }
+      // Worktree checkouts live at .opencode/worktree/<name>/; the entry must exist
+      // in the project's .gitignore or the nested worktrees show up in `git status`
+      // and are vulnerable to `git clean -fd`. For already-initialised projects we
+      // append the missing entry rather than rewriting the whole file.
+      const existing = yield* fs.readFileString(gitignore).pipe(Effect.catch(() => Effect.succeed("")))
+      const lines = new Set(existing.split(/\r?\n/).map((l) => l.trim()))
+      if (lines.has(".opencode/worktree") || lines.has(".opencode/worktree/")) return
+      const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n"
+      yield* fs
+        .writeFileString(gitignore, `${existing}${separator}.opencode/worktree\n`)
+        .pipe(
+          Effect.catchIf(
+            (e) => e.reason._tag === "PermissionDenied",
+            () => Effect.void,
+          ),
+        )
     })
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(

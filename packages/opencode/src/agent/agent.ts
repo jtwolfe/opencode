@@ -251,6 +251,9 @@ export const layer = Layer.effect(
                 bash: "allow",
                 "smart-task": "allow",
                 "ingest-design-docs": "allow",
+                // todowrite externalizes the task DAG so the user sees live progress
+                // and the orchestrator's plan survives context compaction. v0.1.
+                todowrite: "allow",
                 webfetch: "allow",
                 websearch: "allow",
                 // The orchestrator dispatches workers through smart-task ONLY.

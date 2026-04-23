@@ -804,6 +804,31 @@ export const SmartTaskTool = Tool.define(
         results: [...allResults.values()],
       }
 
+      // Phase 3 — system-reminder injection. Append a ledger/budget snapshot
+      // to the output so the orchestrator's next turn receives fresh state
+      // without having to re-read disk. Mirrors the pattern at tool/read.ts:262.
+      const reviewCount = [...allResults.values()].filter((r) => r.status === "failed").length
+      const liveWorktreeCount = updatedState.worktrees.filter((w) => w.live).length
+      const roundCap = cfg.autocrew?.budget?.max_rounds_per_run ?? 40
+      const recentEvents = yield* Ledger.readLedger(params.plan_id).pipe(
+        Effect.map((events) => events.slice(-5).map((e) => e.type).join(", ")),
+        Effect.catchCause(() => Effect.succeed("")),
+      )
+      const reminderLines = [
+        "<system-reminder>",
+        `AutoCrew ledger snapshot for ${params.plan_id}:`,
+        `- rounds_consumed: ${roundsConsumed} / ${roundCap}`,
+        `- tasks: completed=${tasksCompleted}, failed=${tasksFailed}, review=${reviewCount}`,
+        `- worktrees alive: ${liveWorktreeCount}`,
+        recentEvents ? `- recent events: ${recentEvents}` : undefined,
+        `- Before dispatching again, call todowrite with the current task states.`,
+        roundsConsumed >= roundCap - 5
+          ? `- WARNING: rounds_remaining < 5; prefer halting with a partial summary over new dispatches.`
+          : undefined,
+        "</system-reminder>",
+      ].filter((l): l is string => !!l)
+      const reminderBlock = reminderLines.join("\n")
+
       const finalStatus = overallStatus as "completed" | "partial" | "failed" | "halted"
       const finalMetadata: {
         planId: string
@@ -823,7 +848,7 @@ export const SmartTaskTool = Tool.define(
       return {
         title: `smart-task: ${tasks.length} task(s), ${rankOutcomes.length} rank(s), ${tasksCompleted} ok / ${tasksFailed} failed`,
         metadata: finalMetadata,
-        output: JSON.stringify(summary, null, 2),
+        output: JSON.stringify(summary, null, 2) + "\n\n" + reminderBlock,
       }
     })
 

@@ -159,7 +159,7 @@ describe("tool.smart-task (Phase 4-5: single-task with worktree)", () => {
             expect(seen?.agent).toBe("coder")
             expect(seen?.sessionID).toBe(kids[0]?.id)
 
-            const summary = JSON.parse(result.output)
+            const summary = JSON.parse(result.output.split("\n\n<system-reminder>")[0]!)
             expect(summary.plan_id).toBe("plan-001")
             expect(summary.status).toBe("completed")
             expect(summary.tasks_total).toBe(1)
@@ -234,7 +234,7 @@ describe("tool.smart-task (Phase 4-5: single-task with worktree)", () => {
             },
           )
 
-          const summary = JSON.parse(result.output)
+          const summary = JSON.parse(result.output.split("\n\n<system-reminder>")[0]!)
           expect(summary.status).toBe("completed")
           expect(summary.tasks_total).toBe(3)
           expect(summary.tasks_completed).toBe(3)
@@ -341,7 +341,7 @@ describe("tool.smart-task (Phase 4-5: single-task with worktree)", () => {
               },
             )
 
-            const summary = JSON.parse(result.output)
+            const summary = JSON.parse(result.output.split("\n\n<system-reminder>")[0]!)
             expect(summary.tasks_completed).toBe(1)
             const r = summary.results[0]
             expect(r.task_id).toBe("task-impl")
@@ -431,7 +431,7 @@ describe("tool.smart-task (Phase 4-5: single-task with worktree)", () => {
         )
 
         expect(seen?.agent).toBe("reviewer")
-        const summary = JSON.parse(result.output)
+        const summary = JSON.parse(result.output.split("\n\n<system-reminder>")[0]!)
         expect(summary.results).toHaveLength(1)
         expect(summary.results[0].task_id).toBe("task-review")
         expect(summary.results[0].output_summary).toContain("87")

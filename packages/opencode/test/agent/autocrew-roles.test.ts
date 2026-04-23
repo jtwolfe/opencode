@@ -102,12 +102,25 @@ test("autocrew orchestrator is a primary agent with smart-task allowed and edit/
       // Prompt content checks — verifies the tool-call-oriented prompt is installed.
       expect(orch?.prompt).toBeDefined()
       expect(orch!.prompt!).toContain("AutoCrew Orchestrator")
-      expect(orch!.prompt!).toContain("you do not write or edit code")
+      // No-code-writing directive (phrasing may vary, key concept must be there).
+      expect(orch!.prompt!).toMatch(/do not write code/i)
       // Meta-evaluation trio must be present (in any listing form).
       expect(orch!.prompt!).toMatch(/continue.*backlog.*halt/)
       // Tool-call framing: the prompt must direct the model to call real tools.
       expect(orch!.prompt!).toContain("`smart-task`")
       expect(orch!.prompt!).toContain("`ingest-design-docs`")
+      // v0.1: TodoWrite integration guidance must be present.
+      expect(orch!.prompt!).toContain("todowrite")
+      // Plan-approval gate line must be documented exactly.
+      expect(orch!.prompt!).toContain("Please approve this plan")
+      // Turn-ending contract must be named.
+      expect(orch!.prompt!).toMatch(/turn.ending.contract/i)
+      // Procedural examples present.
+      expect(orch!.prompt!).toContain("<example>")
+      // Length regression guard: keep the prompt reasonably thin. If this
+      // triggers, check you're not re-specifying things the base prompt already covers.
+      // (Pre-v0.1 the prompt was >9000 chars with harness-XML framing. Post-rewrite target <7000.)
+      expect(orch!.prompt!.length).toBeLessThan(7000)
       // Harness-XML framing must NOT be the output format. If this regresses,
       // the orchestrator will stop mid-run emitting fake "<decision>" tags
       // and the user will have to type "continue" to resume (Apr 21 postmortem).
@@ -121,6 +134,7 @@ test("autocrew orchestrator is a primary agent with smart-task allowed and edit/
       // edit code and cannot bypass worktree isolation via the `task` tool.
       expect(evalPerm(orch, "smart-task")).toBe("allow")
       expect(evalPerm(orch, "ingest-design-docs")).toBe("allow")
+      expect(evalPerm(orch, "todowrite")).toBe("allow")
       expect(evalPerm(orch, "read")).toBe("allow")
       expect(evalPerm(orch, "edit")).toBe("deny")
       expect(evalPerm(orch, "write")).toBe("deny")

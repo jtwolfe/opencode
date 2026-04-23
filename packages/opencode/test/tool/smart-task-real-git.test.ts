@@ -181,7 +181,7 @@ describe("smart-task — real git integration (regression test for WorktreeNotGi
             )
 
             // Assertion 1: the dispatch produced a completed task with worktree info.
-            const summary = JSON.parse(result.output)
+            const summary = JSON.parse(result.output.split("\n\n<system-reminder>")[0]!)
             expect(summary.status).toBe("completed")
             expect(summary.tasks_completed).toBe(1)
             const r0 = summary.results[0]
@@ -189,6 +189,14 @@ describe("smart-task — real git integration (regression test for WorktreeNotGi
             expect(r0.status).toBe("completed")
             expect(r0.worktree).toBeDefined()
             expect(r0.worktree.branch).toMatch(/^opencode\/plan-realgit-001-task-001-/)
+
+            // Phase 3: system-reminder block appended to the output string so the
+            // orchestrator's next turn sees current ledger + budget state.
+            expect(result.output).toContain("<system-reminder>")
+            expect(result.output).toContain("</system-reminder>")
+            expect(result.output).toContain("plan-realgit-001")
+            expect(result.output).toMatch(/rounds_consumed:\s*\d+\s*\/\s*\d+/)
+            expect(result.output).toContain("todowrite")
 
             // Assertion 2: the worker actually saw the worktree's Instance context.
             // This is the regression test — if InstanceRef is not propagated
@@ -294,7 +302,7 @@ describe("smart-task — real git integration (regression test for WorktreeNotGi
               },
             )
 
-            const summary = JSON.parse(result.output)
+            const summary = JSON.parse(result.output.split("\n\n<system-reminder>")[0]!)
             expect(summary.tasks_completed).toBe(1)
             const r = summary.results[0]
             expect(r.candidates_evaluated).toBe(2)
